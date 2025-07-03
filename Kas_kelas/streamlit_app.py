@@ -1,4 +1,7 @@
 import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+import sqlite3
 from datetime import datetime
 from konfigurasi import DATE_FORMAT, KATEGORI_PEMASUKAN, KATEGORI_PENGELUARAN, NAMA_KELAS, TAHUN_AJAR
 from manajer_kas import ManajerKas
@@ -36,11 +39,13 @@ class KasApp:
                     st.experimental_rerun()
 
     def render_tabs(self):
-        tab1, tab2 = st.tabs(["➕ Tambah Transaksi", "📋 Riwayat Transaksi"])
+        tab1, tab2, tab3 = st.tabs(["➕ Tambah Transaksi", "📋 Riwayat Transaksi", "📊 Grafik Kas"])
         with tab1:
             self.render_tambah_transaksi()
         with tab2:
             self.render_riwayat_transaksi()
+        with tab3:
+            self.render_grafik_kas()
 
     def render_tambah_transaksi(self):
         st.subheader("Tambah Transaksi Kas")
@@ -111,6 +116,36 @@ class KasApp:
             elif batal_edit:
                 del st.session_state.editing
                 st.experimental_rerun()
+
+    def render_grafik_kas(self):
+        st.subheader("📊 Grafik Kas Masuk dan Keluar")
+
+        # Koneksi dan ambil data
+        conn = sqlite3.connect("kas_kelas.db")
+        query = "SELECT tanggal, jenis, jumlah FROM kas"
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+
+        if df.empty:
+            st.info("Belum ada data transaksi untuk ditampilkan.")
+            return
+
+        # Proses data
+        df['tanggal'] = pd.to_datetime(df['tanggal'])
+        df['bulan'] = df['tanggal'].dt.to_period('M').astype(str)
+        df_grouped = df.groupby(['bulan', 'jenis'])['jumlah'].sum().unstack().fillna(0)
+
+        # Tabel data agregasi
+        st.dataframe(df_grouped, use_container_width=True)
+
+        # Grafik
+        fig, ax = plt.subplots()
+        df_grouped.plot(kind='bar', ax=ax)
+        ax.set_title("Kas Masuk dan Keluar per Bulan")
+        ax.set_xlabel("Bulan")
+        ax.set_ylabel("Jumlah (Rp)")
+        ax.legend(["Pemasukan", "Pengeluaran"])
+        st.pyplot(fig)
 
 if __name__ == "__main__":
     KasApp()
